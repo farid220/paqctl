@@ -139,8 +139,6 @@ This will show you the **Server IP**, **Port**, and **Key/Auth Code** you need f
 
 ## Windows Client - Complete Guide
 
-Windows uses a PowerShell script that handles everything automatically.
-
 ### Prerequisites
 
 - Windows 10 or 11
@@ -149,50 +147,78 @@ Windows uses a PowerShell script that handles everything automatically.
 
 ---
 
-### Step 1: Download the Client
+## 🚀 Easy Method (Recommended) - Using .bat Files
 
-**Option A: Download ZIP from GitHub**
+The simplest way to get started - just download, double-click, and connect!
 
-1. Go to: https://github.com/SamNet-dev/paqctl/releases
-2. Download the latest `paqctl-client-windows.zip`
-3. Extract to a folder (e.g., `C:\paqctl-client`)
+### Step 1: Download
 
-**Option B: Clone with Git**
+1. Go to: https://github.com/SamNet-dev/paqctl
+2. Click the green **"Code"** button → **"Download ZIP"**
+3. Extract the ZIP file anywhere (e.g., Desktop)
+4. Open the `windows` folder inside
 
+### Step 2: Install Protocol
+
+You'll see two `.bat` files:
+- `Paqet-Client.bat` - For Paqet protocol (simple, recommended)
+- `GFK-Client.bat` - For GFW-knocker protocol (advanced)
+
+**Right-click** your chosen `.bat` file → **"Run as administrator"**
+
+First run will install Npcap (required for raw sockets). Follow the installer prompts.
+
+### Step 3: Configure & Connect
+
+After installation, the script will ask for your server info:
+- **Paqet:** Server address (e.g., `1.2.3.4:8443`) and encryption key
+- **GFK:** Server IP and auth code
+
+Enter the values from your server (shown after server setup or via `paqctl info`).
+
+Once configured, press **Connect** and you're done!
+
+### Step 4: Use the Proxy
+
+Configure your browser to use SOCKS5 proxy:
+- **Paqet:** `127.0.0.1:1080`
+- **GFK:** `127.0.0.1:14000`
+
+To disconnect, press `Ctrl+C` in the window.
+
+---
+
+## 💻 Advanced Method - PowerShell Script
+
+For more control, use the interactive PowerShell menu.
+
+### Step 1: Open PowerShell as Administrator
+
+1. Press `Win + S`, type `PowerShell`
+2. Right-click "Windows PowerShell" → **"Run as administrator"**
+3. Click "Yes" on the UAC prompt
+
+### Step 2: Run the Script
+
+**Option A: One-liner (downloads and runs automatically)**
+```powershell
+irm https://raw.githubusercontent.com/SamNet-dev/paqctl/main/windows/paqet-client.ps1 | iex
+```
+
+**Option B: Download first, then run**
 ```powershell
 git clone https://github.com/SamNet-dev/paqctl.git
 cd paqctl\windows
+.\paqet-client.ps1
 ```
 
----
+### Step 3: Use the Menu
 
-### Step 2: Open PowerShell as Administrator
-
-This is **required** - the tool needs admin rights for raw socket access.
-
-**Method 1: Search**
-1. Press `Win + S` (or click Start)
-2. Type `PowerShell`
-3. Right-click "Windows PowerShell"
-4. Click "Run as administrator"
-5. Click "Yes" on the UAC prompt
-
-**Method 2: Win+X Menu**
-1. Press `Win + X`
-2. Click "Windows PowerShell (Admin)" or "Terminal (Admin)"
-
----
-
-### Step 3: Navigate to the Script
-
-```powershell
-# If you downloaded the ZIP:
-cd C:\paqctl-client
-
-# If you cloned with git:
-cd C:\path\to\paqctl\windows
-# Example: cd C:\Users\YourName\Downloads\paqctl\windows
-```
+The interactive menu lets you:
+1. Install paqet or GFK
+2. Configure connection
+3. Start/stop client
+4. Check status
 
 ---
 
@@ -840,8 +866,6 @@ sudo paqctl info
 
 ## راهنمای کامل کلاینت ویندوز
 
-ویندوز از یک اسکریپت PowerShell استفاده می‌کند که همه چیز را خودکار انجام می‌دهد.
-
 ### پیش‌نیازها
 
 - ویندوز ۱۰ یا ۱۱
@@ -850,62 +874,83 @@ sudo paqctl info
 
 ---
 
-### مرحله ۱: دانلود کلاینت
+## 🚀 روش آسان (پیشنهادی) - استفاده از فایل‌های .bat
 
-**گزینه A: دانلود ZIP از گیت‌هاب**
+ساده‌ترین روش - فقط دانلود کنید، دوبار کلیک کنید و وصل شوید!
 
-1. بروید به: https://github.com/SamNet-dev/paqctl/releases
-2. آخرین نسخه `paqctl-client-windows.zip` را دانلود کنید
-3. در یک پوشه استخراج کنید (مثلاً `C:\paqctl-client`)
+### مرحله ۱: دانلود
 
-**گزینه B: کلون با Git**
+1. بروید به: https://github.com/SamNet-dev/paqctl
+2. روی دکمه سبز **"Code"** کلیک کنید → **"Download ZIP"**
+3. فایل ZIP را در هر جایی استخراج کنید (مثلاً دسکتاپ)
+4. وارد پوشه `windows` شوید
 
+### مرحله ۲: نصب پروتکل
+
+دو تا فایل `.bat` می‌بینید:
+- `Paqet-Client.bat` - برای پروتکل Paqet (ساده، پیشنهادی)
+- `GFK-Client.bat` - برای پروتکل GFW-knocker (پیشرفته)
+
+روی فایل `.bat` مورد نظر **راست‌کلیک** کنید → **"Run as administrator"**
+
+اجرای اول Npcap را نصب می‌کند (برای raw socket لازم است). مراحل نصب را دنبال کنید.
+
+### مرحله ۳: پیکربندی و اتصال
+
+بعد از نصب، اسکریپت اطلاعات سرور را می‌خواهد:
+- **Paqet:** آدرس سرور (مثلاً `1.2.3.4:8443`) و کلید رمزنگاری
+- **GFK:** آی‌پی سرور و کد احراز هویت
+
+مقادیر را از سرور وارد کنید (بعد از نصب سرور نشان داده می‌شود یا با `paqctl info`).
+
+وقتی تنظیم شد، **Connect** را بزنید و تمام!
+
+### مرحله ۴: استفاده از پروکسی
+
+مرورگر را روی پروکسی SOCKS5 تنظیم کنید:
+- **Paqet:** `127.0.0.1:1080`
+- **GFK:** `127.0.0.1:14000`
+
+برای قطع اتصال، `Ctrl+C` را در پنجره فشار دهید.
+
+---
+
+## 💻 روش پیشرفته - اسکریپت PowerShell
+
+برای کنترل بیشتر، از منوی تعاملی PowerShell استفاده کنید.
+
+### مرحله ۱: باز کردن PowerShell با دسترسی Administrator
+
+1. کلید `Win + S` را فشار دهید، تایپ کنید `PowerShell`
+2. روی "Windows PowerShell" راست‌کلیک → **"Run as administrator"**
+3. روی "Yes" در پنجره UAC کلیک کنید
+
+### مرحله ۲: اجرای اسکریپت
+
+**گزینه A: یک خطی (خودکار دانلود و اجرا می‌کند)**
+```powershell
+irm https://raw.githubusercontent.com/SamNet-dev/paqctl/main/windows/paqet-client.ps1 | iex
+```
+
+**گزینه B: اول دانلود، بعد اجرا**
 ```powershell
 git clone https://github.com/SamNet-dev/paqctl.git
 cd paqctl\windows
+.\paqet-client.ps1
 ```
 
----
+### مرحله ۳: استفاده از منو
 
-### مرحله ۲: باز کردن PowerShell با دسترسی Administrator
+منوی تعاملی امکان این کارها را می‌دهد:
+1. نصب paqet یا GFK
+2. پیکربندی اتصال
+3. شروع/توقف کلاینت
+4. بررسی وضعیت
 
-این **ضروری** است - ابزار برای دسترسی به raw socket نیاز به حقوق admin دارد.
-
-**روش ۱: جستجو**
-1. کلید `Win + S` را فشار دهید
-2. تایپ کنید `PowerShell`
-3. روی "Windows PowerShell" راست‌کلیک کنید
-4. روی "Run as administrator" کلیک کنید
-5. روی "Yes" در پنجره UAC کلیک کنید
-
-**روش ۲: منوی Win+X**
-1. کلید `Win + X` را فشار دهید
-2. روی "Windows PowerShell (Admin)" یا "Terminal (Admin)" کلیک کنید
-
----
-
-### مرحله ۳: رفتن به محل اسکریپت
-
-```powershell
-# اگر ZIP دانلود کردید:
-cd C:\paqctl-client
-
-# اگر با git کلون کردید:
-cd C:\path\to\paqctl\windows
-# مثال: cd C:\Users\YourName\Downloads\paqctl\windows
-```
-
----
-
-### مرحله ۴: اجازه اجرای اسکریپت
-
-ویندوز به طور پیش‌فرض اسکریپت‌ها را مسدود می‌کند. این را یک بار اجرا کنید:
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-وقتی پرسید `Y` را تایپ کنید و Enter بزنید.
+> **نکته:** اگر خطای "Running scripts is disabled" دیدید، این را یک بار اجرا کنید:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
 
 ---
 

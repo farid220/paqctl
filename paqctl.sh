@@ -392,8 +392,21 @@ download_paqet() {
     local tmp_file
     tmp_file=$(mktemp "/tmp/paqet-download-XXXXXXXX.${ext}") || { log_error "Failed to create temp file"; return 1; }
 
-    if ! curl -sL --max-time 120 --fail -o "$tmp_file" "$url"; then
+    # Try curl first, fallback to wget
+    local download_ok=false
+    if curl -sL --max-time 180 --retry 3 --retry-delay 5 --fail -o "$tmp_file" "$url" 2>/dev/null; then
+        download_ok=true
+    elif command -v wget &>/dev/null; then
+        log_info "curl failed, trying wget..."
+        rm -f "$tmp_file"
+        if wget -q --timeout=180 --tries=3 -O "$tmp_file" "$url" 2>/dev/null; then
+            download_ok=true
+        fi
+    fi
+
+    if [ "$download_ok" != "true" ]; then
         log_error "Failed to download: $url"
+        log_error "Try manual download: wget '$url' and place binary in $INSTALL_DIR/bin/"
         rm -f "$tmp_file"
         return 1
     fi
@@ -2294,8 +2307,21 @@ download_paqet() {
     local tmp_file
     tmp_file=$(mktemp "/tmp/paqet-download-XXXXXXXX.${ext}") || { log_error "Failed to create temp file"; return 1; }
 
-    if ! curl -sL --max-time 120 --fail -o "$tmp_file" "$url"; then
+    # Try curl first, fallback to wget
+    local download_ok=false
+    if curl -sL --max-time 180 --retry 3 --retry-delay 5 --fail -o "$tmp_file" "$url" 2>/dev/null; then
+        download_ok=true
+    elif command -v wget &>/dev/null; then
+        log_info "curl failed, trying wget..."
+        rm -f "$tmp_file"
+        if wget -q --timeout=180 --tries=3 -O "$tmp_file" "$url" 2>/dev/null; then
+            download_ok=true
+        fi
+    fi
+
+    if [ "$download_ok" != "true" ]; then
         log_error "Failed to download: $url"
+        log_error "Try manual download: wget '$url' and place binary in $INSTALL_DIR/bin/"
         rm -f "$tmp_file"
         return 1
     fi

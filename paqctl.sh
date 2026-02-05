@@ -4607,7 +4607,7 @@ Designed for heavy DPI environments like the Great Firewall.
         tech_desc="🔗 *What is Paqet?*
 A raw-socket encrypted proxy using KCP protocol.
 Simple all-in-one solution with built-in SOCKS5 proxy.
-• KCP over raw sockets bypasses DPI
+• KCP over raw TCP packets with custom flags bypasses DPI
 • Built-in SOCKS5 proxy (no extra software needed)
 • Easy setup with just IP, port, and key"
     fi
@@ -6040,9 +6040,9 @@ show_info_menu() {
                 echo -e "  ${BOLD}Contact:${NC}    Signal @hanselime.11"
                 echo ""
                 echo "  Paqet is a bidirectional packet-level proxy that uses"
-                echo "  raw sockets (gopacket + libpcap) with KCP encrypted"
-                echo "  transport. It operates below the OS TCP/IP stack to"
-                echo "  bypass firewalls and deep packet inspection."
+                echo "  KCP over raw TCP packets with custom TCP flags."
+                echo "  It operates below the OS TCP/IP stack to bypass"
+                echo "  firewalls and deep packet inspection."
                 echo ""
                 echo "  Features:"
                 echo "  - Raw TCP packet crafting via gopacket"
@@ -6050,6 +6050,7 @@ show_info_menu() {
                 echo "  - SOCKS5 proxy for dynamic connections"
                 echo "  - Connection multiplexing via smux"
                 echo "  - Cross-platform (Linux, macOS, Windows)"
+                echo "  - Android client: github.com/AliRezaBeigy/paqetNG"
                 echo ""
                 echo -e "  ${CYAN}── paqctl Management Tool ──${NC}"
                 echo ""

@@ -77,8 +77,8 @@ YOUR COMPUTER                YOUR VPS                   INTERNET
 ```
 
 **How Paqet bypasses firewalls:**
-1. Uses KCP protocol (reliable UDP) instead of TCP
-2. Sends packets via raw sockets, making them look like random UDP traffic
+1. Uses KCP protocol over raw TCP packets with custom TCP flags
+2. Sends packets via raw sockets, making them hard to fingerprint
 3. DPI systems can't easily identify it as proxy traffic
 
 ---
@@ -1030,7 +1030,8 @@ MIT License - See [LICENSE](LICENSE) file.
 
 ## Acknowledgments
 
-- [paqet](https://github.com/hanselime/paqet) - KCP-based proxy with built-in SOCKS5 (original source)
+- [paqet](https://github.com/hanselime/paqet) - KCP over raw TCP packets with custom flags (original source)
+- [paqetNG](https://github.com/AliRezaBeigy/paqetNG) - Android client for paqet
 - [GFW-knocker](https://github.com/GFW-knocker/gfw_resist_tcp_proxy) - Violated TCP technique
 - [aioquic](https://github.com/aiortc/aioquic) - QUIC protocol implementation
 - [scapy](https://scapy.net/) - Packet manipulation library
@@ -1076,13 +1077,13 @@ MIT License - See [LICENSE](LICENSE) file.
 ### Paqet (ساده)
 
 ```
-[Browser] --> [Paqet Client] --KCP/UDP--> [Paqet Server] --SOCKS5--> [Internet]
+[Browser] --> [Paqet Client] --KCP/Raw TCP--> [Paqet Server] --SOCKS5--> [Internet]
                  127.0.0.1:1080              your.vps.ip
 ```
 
 **نحوه دور زدن فایروال:**
-1. از پروتکل KCP (UDP قابل اطمینان) به جای TCP استفاده می‌کند
-2. بسته‌ها را از طریق raw socket ارسال می‌کند که شبیه ترافیک UDP تصادفی به نظر می‌رسند
+1. از پروتکل KCP روی پکت‌های TCP خام با فلگ‌های سفارشی استفاده می‌کند
+2. بسته‌ها را از طریق raw socket ارسال می‌کند که شناسایی آن‌ها سخت است
 3. سیستم‌های DPI نمی‌توانند به راحتی آن را شناسایی کنند
 
 ### GFW-Knocker (پیشرفته)

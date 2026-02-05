@@ -476,26 +476,46 @@ download_paqet() {
 detect_network() {
     log_info "Auto-detecting network configuration..."
 
-    # Default interface
-    DETECTED_IFACE=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
+    # Default interface - handle both standard "via X dev Y" and OpenVZ "dev Y scope link" formats
+    # Standard: "default via 192.168.1.1 dev eth0" -> $5 = eth0
+    # OpenVZ:   "default dev venet0 scope link"   -> $3 = venet0
+    local _route_line
+    _route_line=$(ip route show default 2>/dev/null | head -1)
+    if [[ "$_route_line" == *" via "* ]]; then
+        # Standard format with gateway
+        DETECTED_IFACE=$(echo "$_route_line" | awk '{print $5}')
+    elif [[ "$_route_line" == *" dev "* ]]; then
+        # OpenVZ/direct format without gateway
+        DETECTED_IFACE=$(echo "$_route_line" | awk '{print $3}')
+    fi
+
+    # Validate detected interface exists
+    if [ -n "$DETECTED_IFACE" ] && ! ip link show "$DETECTED_IFACE" &>/dev/null; then
+        DETECTED_IFACE=""
+    fi
+
     if [ -z "$DETECTED_IFACE" ]; then
         # Skip loopback, docker, veth, bridge, and other virtual interfaces
         # Note: grep -v returns exit 1 if no matches, so we add || true for pipefail
         DETECTED_IFACE=$(ip -o link show 2>/dev/null | awk -F': ' '{gsub(/ /,"",$2); print $2}' | { grep -vE '^(lo|docker[0-9]|br-|veth|virbr|tun|tap|wg)' || true; } | head -1)
     fi
 
-    # Local IP
+    # Local IP - wrap entire pipeline to prevent pipefail exit
     if [ -n "$DETECTED_IFACE" ]; then
-        # Note: grep returns exit 1 if no matches, so we add || true for pipefail
-        DETECTED_IP=$(ip -4 addr show "$DETECTED_IFACE" 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | { grep -o '[0-9.]*' || true; } | head -1)
+        # Note: wrap in subshell with || true to handle cases where interface is invalid or has no IP
+        DETECTED_IP=$( (ip -4 addr show "$DETECTED_IFACE" 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | { grep -o '[0-9.]*' || true; } | head -1) || true )
     fi
     if [ -z "$DETECTED_IP" ]; then
         DETECTED_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
         [ -z "$DETECTED_IP" ] && DETECTED_IP=$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{gsub(/\/.*/, "", $2); print $2; exit}')
     fi
 
-    # Gateway IP
-    DETECTED_GATEWAY=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
+    # Gateway IP - only present in standard "via X" format, not in OpenVZ
+    if [[ "$_route_line" == *" via "* ]]; then
+        DETECTED_GATEWAY=$(echo "$_route_line" | awk '{print $3}')
+    else
+        DETECTED_GATEWAY=""
+    fi
 
     # Gateway MAC
     DETECTED_GW_MAC=""
@@ -1982,25 +2002,45 @@ _check_length() { [ ${#1} -le "${2:-256}" ]; }
 detect_network() {
     log_info "Auto-detecting network configuration..."
 
-    # Default interface
-    DETECTED_IFACE=$(ip route show default 2>/dev/null | awk '{print $5; exit}')
+    # Default interface - handle both standard "via X dev Y" and OpenVZ "dev Y scope link" formats
+    # Standard: "default via 192.168.1.1 dev eth0" -> $5 = eth0
+    # OpenVZ:   "default dev venet0 scope link"   -> $3 = venet0
+    local _route_line
+    _route_line=$(ip route show default 2>/dev/null | head -1)
+    if [[ "$_route_line" == *" via "* ]]; then
+        # Standard format with gateway
+        DETECTED_IFACE=$(echo "$_route_line" | awk '{print $5}')
+    elif [[ "$_route_line" == *" dev "* ]]; then
+        # OpenVZ/direct format without gateway
+        DETECTED_IFACE=$(echo "$_route_line" | awk '{print $3}')
+    fi
+
+    # Validate detected interface exists
+    if [ -n "$DETECTED_IFACE" ] && ! ip link show "$DETECTED_IFACE" &>/dev/null; then
+        DETECTED_IFACE=""
+    fi
+
     if [ -z "$DETECTED_IFACE" ]; then
         # Note: grep -v returns exit 1 if no matches, so we add || true for pipefail
         DETECTED_IFACE=$(ip -o link show 2>/dev/null | awk -F': ' '{gsub(/ /,"",$2); print $2}' | { grep -vE '^(lo|docker[0-9]|br-|veth|virbr|tun|tap|wg)' || true; } | head -1)
     fi
 
-    # Local IP
+    # Local IP - wrap entire pipeline to prevent pipefail exit
     if [ -n "$DETECTED_IFACE" ]; then
-        # Note: grep returns exit 1 if no matches, so we add || true for pipefail
-        DETECTED_IP=$(ip -4 addr show "$DETECTED_IFACE" 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | { grep -o '[0-9.]*' || true; } | head -1)
+        # Note: wrap in subshell with || true to handle cases where interface is invalid or has no IP
+        DETECTED_IP=$( (ip -4 addr show "$DETECTED_IFACE" 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | { grep -o '[0-9.]*' || true; } | head -1) || true )
     fi
     if [ -z "$DETECTED_IP" ]; then
         DETECTED_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
         [ -z "$DETECTED_IP" ] && DETECTED_IP=$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{gsub(/\/.*/, "", $2); print $2; exit}')
     fi
 
-    # Gateway IP
-    DETECTED_GATEWAY=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
+    # Gateway IP - handle OpenVZ format (may not have gateway)
+    if [[ "$_route_line" == *" via "* ]]; then
+        DETECTED_GATEWAY=$(echo "$_route_line" | awk '{print $3}')
+    else
+        DETECTED_GATEWAY=""
+    fi
 
     # Gateway MAC
     DETECTED_GW_MAC=""

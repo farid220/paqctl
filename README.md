@@ -109,20 +109,25 @@ YOUR COMPUTER                YOUR VPS                   INTERNET
 <details>
 <summary><strong>Using GFK with an Existing Xray Panel (3x-ui, Marzban, etc.)</strong></summary>
 
-If you already have an Xray panel on your server, GFK works alongside it without conflicts. GFK is a raw TCP forwarder — it tunnels traffic to whatever service is running on your target port.
+If your foreign server already has an Xray panel (3x-ui, Marzban, etc.), paqctl detects it and works alongside it. Your panel stays untouched — paqctl only adds what's needed.
 
-**How paqctl handles existing Xray:**
+**What paqctl does when it detects Xray:**
 
-| Scenario | What happens |
+| Scenario | What paqctl does |
 |---|---|
-| **No Xray installed** | paqctl installs Xray with a SOCKS5 proxy automatically |
-| **Xray panel running, target port is listening** | paqctl skips Xray setup, GFK forwards to your panel's inbound |
-| **Xray running, target port NOT listening** | paqctl warns you — configure your panel to listen on that port |
-| **Xray installed but not running** | paqctl installs its own SOCKS5 (same as fresh install) |
+| **No Xray installed** | Installs Xray with SOCKS5 proxy automatically (nothing to configure) |
+| **Xray panel running** | Keeps your panel, adds a SOCKS5 inbound on a free port (e.g. 10443), appends an extra port mapping automatically |
+| **Xray installed but not running** | Installs its own SOCKS5 (same as fresh install) |
 
-**Step-by-step setup (panel on both servers):**
+When a panel is detected, paqctl gives you **two connections** automatically:
+- **Panel mapping** (`14000:443`) — for server-to-server panel traffic (vmess/vless)
+- **SOCKS5 mapping** (`14001:10443`) — for direct proxy use from Windows/Mac (no v2rayN needed)
 
-Assume your **foreign server** has a panel with vmess/vless inbound on port `443`, and your **Iran server** has a panel with outbound to the foreign server.
+---
+
+### Setup A: Server-to-Server (Iran panel to Foreign panel)
+
+This is for when you have a panel on **both** servers (Iran + foreign) and want to route the Iran panel's outbound through the GFK tunnel instead of a direct connection.
 
 **1. Install paqctl on the foreign server (server role):**
 ```bash
@@ -130,14 +135,14 @@ curl -fsSL https://raw.githubusercontent.com/SamNet-dev/paqctl/main/paqctl.sh | 
 ```
 - Choose **server** role
 - Set port mapping: `14000:443` (where `443` is your panel's inbound port)
-- paqctl detects Xray is running and skips SOCKS5 — your panel stays untouched
+- paqctl detects Xray and adds SOCKS5 alongside your panel (e.g. `14001:10443`)
 
 **2. Install paqctl on the Iran server (client role):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SamNet-dev/paqctl/main/paqctl.sh | sudo bash
 ```
 - Choose **client** role
-- Set the **same** port mapping: `14000:443`
+- Use the **exact same** port mappings shown in the server output (e.g. `14000:443,14001:10443`)
 - Use the same auth code from the server setup
 
 **3. Update your Iran panel outbound to route through GFK:**
@@ -175,21 +180,43 @@ In your Iran panel (3x-ui, Marzban, etc.), change the outbound that connects to 
 ```
 
 The key changes:
-- `address`: from `FOREIGN_SERVER_IP` to `127.0.0.1`
-- `port`: from `443` to `14000` (the VIO port from your mapping)
+- `address`: from `FOREIGN_SERVER_IP` to `127.0.0.1` (traffic goes through GFK on the same machine)
+- `port`: from `443` to `14000` (the VIO port, NOT the original server port)
 
-**4. Traffic flow:**
+**Traffic flow:**
 ```
 End user --> Iran panel inbound --> Iran panel outbound (127.0.0.1:14000)
   --> GFK client (VIO port) --> QUIC tunnel over violated TCP
   --> Foreign GFK server --> 127.0.0.1:443 (foreign panel inbound) --> Internet
 ```
 
+---
+
+### Setup B: Direct Client (Windows/Mac to Foreign server)
+
+This is for when you **don't have an Iran server** — you connect directly from your Windows or Mac to the foreign server through GFK. paqctl auto-adds a SOCKS5 proxy so you can use it as a simple browser proxy.
+
+**1. Install paqctl on the foreign server** (same as above)
+
+**2. On your Windows/Mac**, install the GFK client and use the SOCKS5 mapping:
+- The server output will show something like: `Mappings: 14000:443,14001:10443`
+- Use `14001` as your proxy port — this is the direct SOCKS5 (no panel/v2rayN needed)
+- Configure your browser or system proxy to `SOCKS5 127.0.0.1:14001`
+
+**Traffic flow:**
+```
+Browser (SOCKS5 127.0.0.1:14001) --> GFK client
+  --> QUIC tunnel over violated TCP
+  --> Foreign GFK server --> 127.0.0.1:10443 (SOCKS5 proxy) --> Internet
+```
+
+---
+
 **Multiple ports:** If your panel uses multiple ports, map them all:
 ```
 14000:443,14001:8080,14002:2020
 ```
-Then create separate outbounds in your Iran panel for each port (14000, 14001, 14002).
+paqctl will add SOCKS5 on the next available port and append it automatically.
 
 > **Note:** The "Firewall: VIO port blocked" status message (shown in green) is **normal and correct**. It means the firewall is properly configured for GFK's raw socket to work.
 
@@ -1195,20 +1222,25 @@ MIT License - See [LICENSE](LICENSE) file.
 <details>
 <summary><strong>استفاده از GFK با پنل Xray موجود (3x-ui، Marzban و غیره)</strong></summary>
 
-اگر از قبل پنل Xray روی سرور خود دارید، GFK بدون تداخل در کنار آن کار می‌کند. GFK یک فورواردر خام TCP است — ترافیک را به هر سرویسی که روی پورت مقصد شما اجرا می‌شود تونل می‌کند.
+اگر سرور خارج شما از قبل پنل Xray دارد (3x-ui، Marzban و غیره)، paqctl آن را تشخیص می‌دهد و در کنار آن کار می‌کند. پنل شما دست نخورده می‌ماند — paqctl فقط چیزهای لازم را اضافه می‌کند.
 
-**رفتار paqctl با Xray موجود:**
+**رفتار paqctl هنگام تشخیص Xray:**
 
-| سناریو | چه اتفاقی می‌افتد |
+| سناریو | عملکرد paqctl |
 |---|---|
-| **Xray نصب نیست** | paqctl به صورت خودکار Xray با پروکسی SOCKS5 نصب می‌کند |
-| **پنل Xray در حال اجراست، پورت مقصد فعال است** | paqctl نصب Xray را رد می‌کند، GFK به اینباند پنل شما فوروارد می‌کند |
-| **Xray در حال اجراست، پورت مقصد فعال نیست** | paqctl هشدار می‌دهد — پنل خود را روی آن پورت تنظیم کنید |
-| **Xray نصب شده ولی اجرا نمی‌شود** | paqctl SOCKS5 خودش را نصب می‌کند (مثل نصب جدید) |
+| **Xray نصب نیست** | Xray با پروکسی SOCKS5 به صورت خودکار نصب می‌شود (نیازی به تنظیم نیست) |
+| **پنل Xray در حال اجراست** | پنل را نگه می‌دارد، یک اینباند SOCKS5 روی پورت آزاد اضافه می‌کند (مثلاً 10443)، و یک مپینگ اضافی اضافه می‌شود |
+| **Xray نصب شده ولی اجرا نمی‌شود** | SOCKS5 خودش را نصب می‌کند (مثل نصب جدید) |
 
-**راهنمای گام به گام (پنل روی هر دو سرور):**
+وقتی پنل تشخیص داده می‌شود، paqctl **دو اتصال** به صورت خودکار می‌دهد:
+- **مپینگ پنل** (`14000:443`) — برای ترافیک سرور به سرور (vmess/vless)
+- **مپینگ SOCKS5** (`14001:10443`) — برای استفاده مستقیم از ویندوز/مک (بدون نیاز به v2rayN)
 
-فرض کنید **سرور خارج** پنلی با اینباند vmess/vless روی پورت `443` دارد و **سرور ایران** پنلی با اوتباند به سرور خارج دارد.
+---
+
+### روش A: سرور به سرور (پنل ایران به پنل خارج)
+
+این روش برای وقتی است که روی **هر دو سرور** (ایران + خارج) پنل دارید و می‌خواهید اوتباند پنل ایران از تونل GFK عبور کند.
 
 **۱. نصب paqctl روی سرور خارج (نقش server):**
 ```bash
@@ -1216,17 +1248,17 @@ curl -fsSL https://raw.githubusercontent.com/SamNet-dev/paqctl/main/paqctl.sh | 
 ```
 - نقش **server** را انتخاب کنید
 - مپینگ پورت: `14000:443` (که `443` پورت اینباند پنل شماست)
-- paqctl تشخیص می‌دهد Xray در حال اجراست و نصب SOCKS5 را رد می‌کند — پنل شما دست نخورده می‌ماند
+- paqctl تشخیص می‌دهد Xray در حال اجراست و SOCKS5 را در کنار پنل اضافه می‌کند (مثلاً `14001:10443`)
 
 **۲. نصب paqctl روی سرور ایران (نقش client):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SamNet-dev/paqctl/main/paqctl.sh | sudo bash
 ```
 - نقش **client** را انتخاب کنید
-- **همان** مپینگ پورت: `14000:443`
+- **دقیقاً همان** مپینگ‌هایی که در خروجی سرور نمایش داده شد را استفاده کنید (مثلاً `14000:443,14001:10443`)
 - همان کد احراز هویت سرور را استفاده کنید
 
-**۳. اوتباند پنل ایران را به‌روزرسانی کنید تا از GFK عبور کند:**
+**۳. اوتباند پنل ایران را تغییر دهید:**
 
 در پنل ایران (3x-ui، Marzban و غیره)، اوتباندی که به سرور خارج متصل می‌شود را تغییر دهید:
 
@@ -1261,21 +1293,43 @@ curl -fsSL https://raw.githubusercontent.com/SamNet-dev/paqctl/main/paqctl.sh | 
 ```
 
 تغییرات کلیدی:
-- `address`: از `IP_SERVER_KHAREJ` به `127.0.0.1`
-- `port`: از `443` به `14000` (پورت VIO از مپینگ شما)
+- `address`: از `IP_SERVER_KHAREJ` به `127.0.0.1` (ترافیک از GFK روی همان ماشین عبور می‌کند)
+- `port`: از `443` به `14000` (پورت VIO، نه پورت اصلی سرور)
 
-**۴. مسیر ترافیک:**
+**مسیر ترافیک:**
 ```
 کاربر --> اینباند پنل ایران --> اوتباند پنل ایران (127.0.0.1:14000)
   --> GFK client (پورت VIO) --> تونل QUIC روی TCP نقض‌شده
   --> GFK server خارج --> 127.0.0.1:443 (اینباند پنل خارج) --> اینترنت
 ```
 
+---
+
+### روش B: کلاینت مستقیم (ویندوز/مک به سرور خارج)
+
+این روش برای وقتی است که **سرور ایران ندارید** — مستقیماً از ویندوز یا مک خود به سرور خارج از طریق GFK متصل می‌شوید. paqctl به صورت خودکار یک پروکسی SOCKS5 اضافه می‌کند تا بتوانید به عنوان پروکسی مرورگر استفاده کنید.
+
+**۱. نصب paqctl روی سرور خارج** (مثل بالا)
+
+**۲. روی ویندوز/مک خود** کلاینت GFK را نصب کنید و از مپینگ SOCKS5 استفاده کنید:
+- خروجی سرور چیزی شبیه این نشان می‌دهد: `Mappings: 14000:443,14001:10443`
+- از `14001` به عنوان پورت پروکسی استفاده کنید — این SOCKS5 مستقیم است (نیازی به پنل/v2rayN نیست)
+- پروکسی مرورگر یا سیستم را روی `SOCKS5 127.0.0.1:14001` تنظیم کنید
+
+**مسیر ترافیک:**
+```
+مرورگر (SOCKS5 127.0.0.1:14001) --> GFK client
+  --> تونل QUIC روی TCP نقض‌شده
+  --> GFK server خارج --> 127.0.0.1:10443 (پروکسی SOCKS5) --> اینترنت
+```
+
+---
+
 **چند پورت:** اگر پنل شما از چند پورت استفاده می‌کند، همه را مپ کنید:
 ```
 14000:443,14001:8080,14002:2020
 ```
-سپس برای هر پورت (14000، 14001، 14002) اوتباند جداگانه در پنل ایران بسازید.
+paqctl به صورت خودکار SOCKS5 را روی پورت آزاد بعدی اضافه و مپ می‌کند.
 
 > **توجه:** پیام وضعیت "Firewall: VIO port blocked" (که با رنگ سبز نمایش داده می‌شود) **عادی و صحیح** است. این به معنای آن است که فایروال به درستی برای کار raw socket در GFK تنظیم شده است.
 

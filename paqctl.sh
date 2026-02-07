@@ -1407,6 +1407,40 @@ EOF
     log_success "Xray configured (SOCKS5 on 127.0.0.1:$listen_port)"
 }
 
+# Add a SOCKS5 inbound to an existing xray config (panel) without touching other inbounds
+_add_xray_gfk_socks() {
+    local port="$1"
+    python3 -c "
+import json, sys
+port = int(sys.argv[1])
+config_path = sys.argv[2]
+try:
+    with open(config_path, 'r') as f:
+        cfg = json.load(f)
+except:
+    cfg = {'inbounds': [], 'outbounds': [{'tag': 'direct', 'protocol': 'freedom', 'settings': {}}]}
+cfg.setdefault('inbounds', [])
+cfg['inbounds'] = [i for i in cfg['inbounds'] if i.get('tag') != 'gfk-socks']
+cfg['inbounds'].append({
+    'tag': 'gfk-socks',
+    'port': port,
+    'listen': '127.0.0.1',
+    'protocol': 'socks',
+    'settings': {'auth': 'noauth', 'udp': True},
+    'sniffing': {'enabled': True, 'destOverride': ['http', 'tls']}
+})
+if not any(o.get('protocol') == 'freedom' for o in cfg.get('outbounds', [])):
+    cfg.setdefault('outbounds', []).append({'tag': 'direct', 'protocol': 'freedom', 'settings': {}})
+with open(config_path, 'w') as f:
+    json.dump(cfg, f, indent=2)
+" "$port" "$XRAY_CONFIG_FILE" 2>/dev/null
+    if [ $? -ne 0 ]; then
+        log_error "Failed to add SOCKS5 inbound to existing Xray config"
+        return 1
+    fi
+    log_success "Added GFK SOCKS5 inbound on 127.0.0.1:$port"
+}
+
 start_xray() {
     log_info "Starting Xray service..."
 
@@ -1456,22 +1490,18 @@ stop_xray() {
 }
 
 setup_xray_for_gfk() {
-    # Get the first target port from GFK_PORT_MAPPINGS (e.g., "14000:443" -> 443)
     local target_port
     target_port=$(echo "${GFK_PORT_MAPPINGS:-14000:443}" | cut -d: -f2 | cut -d, -f1)
 
-    # If xray is already running (e.g. user has a panel), skip SOCKS5 setup.
-    # GFK is a raw TCP forwarder — traffic goes to whatever is on the target port.
-    # The user's panel/services handle the actual proxying.
     if pgrep -x xray &>/dev/null; then
         XRAY_PANEL_DETECTED=true
-        log_info "Existing Xray detected — skipping SOCKS5 setup (panel will handle traffic)"
+        log_info "Existing Xray detected — adding SOCKS5 alongside panel..."
 
         # Clean up any leftover standalone GFK xray from prior installs
         pkill -f "xray run -c.*gfk-socks.json" 2>/dev/null || true
         rm -f "${XRAY_CONFIG_DIR}/gfk-socks.json" 2>/dev/null
 
-        # Check all target ports from mappings
+        # Check all existing target ports from mappings
         local mapping pairs
         IFS=',' read -ra pairs <<< "${GFK_PORT_MAPPINGS:-14000:443}"
         for mapping in "${pairs[@]}"; do
@@ -1480,17 +1510,54 @@ setup_xray_for_gfk() {
             if ss -tln 2>/dev/null | grep -q ":${tp} "; then
                 log_success "Port $tp is listening — GFK will forward VIO port $vio_port to this port"
             else
-                log_warn "Port $tp is NOT listening on this server — make sure your xray panel inbound is configured on port $tp"
+                log_warn "Port $tp is NOT listening — make sure your panel inbound is on port $tp"
             fi
         done
 
+        # Find free port for SOCKS5 (starting at 10443)
+        local socks_port=10443
+        while ss -tln 2>/dev/null | grep -q ":${socks_port} "; do
+            socks_port=$((socks_port + 1))
+            if [ "$socks_port" -gt 65000 ]; then
+                log_warn "Could not find free port for SOCKS5 — panel-only mode"
+                echo ""
+                local first_vio
+                first_vio=$(echo "${GFK_PORT_MAPPINGS:-14000:443}" | cut -d: -f1 | cut -d, -f1)
+                log_warn "For panel-to-panel: configure Iran panel outbound to 127.0.0.1:${first_vio}"
+                return 0
+            fi
+        done
+
+        # Add SOCKS5 inbound to existing xray config
+        _add_xray_gfk_socks "$socks_port" || {
+            log_warn "Could not add SOCKS5 to panel config — panel-only mode"
+            return 0
+        }
+
+        # Restart xray to load new config
+        systemctl restart xray 2>/dev/null || pkill -SIGHUP xray 2>/dev/null || true
+        sleep 2
+
+        # Find next VIO port (highest existing + 1) and append SOCKS5 mapping
+        local max_vio=0
+        for mapping in "${pairs[@]}"; do
+            local v="${mapping%%:*}"
+            [ "$v" -gt "$max_vio" ] && max_vio="$v"
+        done
+        local socks_vio=$((max_vio + 1))
+        GFK_PORT_MAPPINGS="${GFK_PORT_MAPPINGS},${socks_vio}:${socks_port}"
+        GFK_SOCKS_PORT="$socks_port"
+        GFK_SOCKS_VIO_PORT="$socks_vio"
+
+        log_success "SOCKS5 proxy added on port $socks_port (VIO port $socks_vio)"
         echo ""
-        log_warn "ACTION REQUIRED: On your Iran server, configure the panel outbound:"
-        log_warn "  → Set address to: 127.0.0.1"
+        log_info "Port mappings updated: ${GFK_PORT_MAPPINGS}"
+        log_warn "Use these SAME mappings on the client side"
+        echo ""
         local first_vio
         first_vio=$(echo "${GFK_PORT_MAPPINGS:-14000:443}" | cut -d: -f1 | cut -d, -f1)
-        log_warn "  → Set port to: ${first_vio} (VIO port, NOT the original server port)"
-        log_warn "  See README for detailed panel configuration guide"
+        log_warn "For panel-to-panel: configure Iran panel outbound to 127.0.0.1:${first_vio}"
+        log_warn "For direct SOCKS5: use 127.0.0.1:${socks_vio} as your proxy on client"
         return 0
     fi
 
@@ -5713,6 +5780,36 @@ EOF
     log_success "Xray configured (SOCKS5 on 127.0.0.1:$listen_port)"
 }
 
+_add_xray_gfk_socks() {
+    local port="$1"
+    python3 -c "
+import json, sys
+port = int(sys.argv[1])
+config_path = sys.argv[2]
+try:
+    with open(config_path, 'r') as f:
+        cfg = json.load(f)
+except:
+    cfg = {'inbounds': [], 'outbounds': [{'tag': 'direct', 'protocol': 'freedom', 'settings': {}}]}
+cfg.setdefault('inbounds', [])
+cfg['inbounds'] = [i for i in cfg['inbounds'] if i.get('tag') != 'gfk-socks']
+cfg['inbounds'].append({
+    'tag': 'gfk-socks', 'port': port, 'listen': '127.0.0.1', 'protocol': 'socks',
+    'settings': {'auth': 'noauth', 'udp': True},
+    'sniffing': {'enabled': True, 'destOverride': ['http', 'tls']}
+})
+if not any(o.get('protocol') == 'freedom' for o in cfg.get('outbounds', [])):
+    cfg.setdefault('outbounds', []).append({'tag': 'direct', 'protocol': 'freedom', 'settings': {}})
+with open(config_path, 'w') as f:
+    json.dump(cfg, f, indent=2)
+" "$port" "$XRAY_CONFIG_FILE" 2>/dev/null
+    if [ $? -ne 0 ]; then
+        log_error "Failed to add SOCKS5 inbound to existing Xray config"
+        return 1
+    fi
+    log_success "Added GFK SOCKS5 inbound on 127.0.0.1:$port"
+}
+
 start_xray() {
     log_info "Starting Xray service..."
     if command -v systemctl &>/dev/null && [ -d /run/systemd/system ]; then
@@ -5751,12 +5848,16 @@ start_xray() {
 setup_xray_for_gfk() {
     local target_port
     target_port=$(echo "${GFK_PORT_MAPPINGS:-14000:443}" | cut -d: -f2 | cut -d, -f1)
+
     if pgrep -x xray &>/dev/null; then
         XRAY_PANEL_DETECTED=true
-        log_info "Existing Xray detected — skipping SOCKS5 setup (panel will handle traffic)"
+        log_info "Existing Xray detected — adding SOCKS5 alongside panel..."
+
+        # Clean up any leftover standalone GFK xray from prior installs
         pkill -f "xray run -c.*gfk-socks.json" 2>/dev/null || true
         rm -f "${XRAY_CONFIG_DIR}/gfk-socks.json" 2>/dev/null
-        # Check all target ports from mappings
+
+        # Check all existing target ports from mappings
         local mapping pairs
         IFS=',' read -ra pairs <<< "${GFK_PORT_MAPPINGS:-14000:443}"
         for mapping in "${pairs[@]}"; do
@@ -5765,18 +5866,57 @@ setup_xray_for_gfk() {
             if ss -tln 2>/dev/null | grep -q ":${tp} "; then
                 log_success "Port $tp is listening — GFK will forward VIO port $vio_port to this port"
             else
-                log_warn "Port $tp is NOT listening on this server — make sure your xray panel inbound is configured on port $tp"
+                log_warn "Port $tp is NOT listening — make sure your panel inbound is on port $tp"
             fi
         done
+
+        # Find free port for SOCKS5 (starting at 10443)
+        local socks_port=10443
+        while ss -tln 2>/dev/null | grep -q ":${socks_port} "; do
+            socks_port=$((socks_port + 1))
+            if [ "$socks_port" -gt 65000 ]; then
+                log_warn "Could not find free port for SOCKS5 — panel-only mode"
+                echo ""
+                local first_vio
+                first_vio=$(echo "${GFK_PORT_MAPPINGS:-14000:443}" | cut -d: -f1 | cut -d, -f1)
+                log_warn "For panel-to-panel: configure Iran panel outbound to 127.0.0.1:${first_vio}"
+                return 0
+            fi
+        done
+
+        # Add SOCKS5 inbound to existing xray config
+        _add_xray_gfk_socks "$socks_port" || {
+            log_warn "Could not add SOCKS5 to panel config — panel-only mode"
+            return 0
+        }
+
+        # Restart xray to load new config
+        systemctl restart xray 2>/dev/null || pkill -SIGHUP xray 2>/dev/null || true
+        sleep 2
+
+        # Find next VIO port (highest existing + 1) and append SOCKS5 mapping
+        local max_vio=0
+        for mapping in "${pairs[@]}"; do
+            local v="${mapping%%:*}"
+            [ "$v" -gt "$max_vio" ] && max_vio="$v"
+        done
+        local socks_vio=$((max_vio + 1))
+        GFK_PORT_MAPPINGS="${GFK_PORT_MAPPINGS},${socks_vio}:${socks_port}"
+        GFK_SOCKS_PORT="$socks_port"
+        GFK_SOCKS_VIO_PORT="$socks_vio"
+
+        log_success "SOCKS5 proxy added on port $socks_port (VIO port $socks_vio)"
         echo ""
-        log_warn "ACTION REQUIRED: On your Iran server, configure the panel outbound:"
-        log_warn "  → Set address to: 127.0.0.1"
+        log_info "Port mappings updated: ${GFK_PORT_MAPPINGS}"
+        log_warn "Use these SAME mappings on the client side"
+        echo ""
         local first_vio
         first_vio=$(echo "${GFK_PORT_MAPPINGS:-14000:443}" | cut -d: -f1 | cut -d, -f1)
-        log_warn "  → Set port to: ${first_vio} (VIO port, NOT the original server port)"
-        log_warn "  See README for detailed panel configuration guide"
+        log_warn "For panel-to-panel: configure Iran panel outbound to 127.0.0.1:${first_vio}"
+        log_warn "For direct SOCKS5: use 127.0.0.1:${socks_vio} as your proxy on client"
         return 0
     fi
+
     install_xray || return 1
     configure_xray_socks "$target_port" || return 1
     start_xray || return 1
@@ -5816,7 +5956,7 @@ _install_gfk_components() {
     # Generate TLS certificates for QUIC
     generate_gfk_certs || return 1
 
-    # Setup Xray (server only — skipped if panel detected)
+    # Setup Xray (server only — adds SOCKS5 alongside panel if detected)
     if [ "$ROLE" = "server" ]; then
         setup_xray_for_gfk || return 1
     fi
@@ -6772,8 +6912,12 @@ main() {
         download_gfk || { log_error "Failed to download GFK"; exit 1; }
         generate_gfk_certs || { log_error "Failed to generate certificates"; exit 1; }
         if [ "$ROLE" = "server" ]; then
-            # Install Xray to provide SOCKS5 proxy on the target port (skipped if panel detected)
+            # Install Xray SOCKS5 proxy (adds alongside panel if detected)
             setup_xray_for_gfk || { log_error "Failed to setup Xray"; exit 1; }
+            # Regenerate config if mappings changed (panel detected → SOCKS5 added)
+            if [ "${XRAY_PANEL_DETECTED:-false}" = "true" ]; then
+                generate_gfk_config || { log_error "Failed to regenerate GFK config"; exit 1; }
+            fi
         elif [ "$ROLE" = "client" ]; then
             install_microsocks || { log_error "Failed to install microsocks"; exit 1; }
             create_gfk_client_wrapper || { log_error "Failed to create client wrapper"; exit 1; }
@@ -6868,11 +7012,13 @@ main() {
             echo -e "  QUIC port:  ${BOLD}${GFK_QUIC_PORT}${NC}"
             if [ "${XRAY_PANEL_DETECTED:-false}" = "true" ]; then
                 echo -e "  Xray:       ${BOLD}Existing panel detected (forwarding to port ${_xray_port})${NC}"
+                echo -e "  SOCKS5:     ${BOLD}127.0.0.1:${GFK_SOCKS_PORT:-N/A} (auto-added, VIO port ${GFK_SOCKS_VIO_PORT:-N/A})${NC}"
                 echo ""
-                echo -e "  ${GREEN}✓ GFK will forward traffic to your existing panel${NC}"
+                echo -e "  ${GREEN}✓ GFK forwards to panel + SOCKS5 proxy added${NC}"
                 local _first_vio
                 _first_vio=$(echo "${GFK_PORT_MAPPINGS:-14000:443}" | cut -d: -f1 | cut -d, -f1)
-                echo -e "  ${YELLOW}! ACTION: Configure Iran panel outbound → 127.0.0.1:${_first_vio}${NC}"
+                echo -e "  ${YELLOW}! Panel users: configure Iran outbound → 127.0.0.1:${_first_vio}${NC}"
+                echo -e "  ${YELLOW}! Direct SOCKS5: use 127.0.0.1:${GFK_SOCKS_VIO_PORT:-} on client${NC}"
             else
                 echo -e "  Xray:       ${BOLD}127.0.0.1:${_xray_port} (SOCKS5)${NC}"
                 echo ""

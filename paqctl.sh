@@ -6684,10 +6684,16 @@ show_menu() {
 
             # Paqet status
             if [ "$paqet_installed" = true ]; then
-                if is_paqet_running; then
-                    echo -e "  Paqet:       ${GREEN}● Running${NC}  |  Port: ${LISTEN_PORT:-8443}  |  SOCKS5: 127.0.0.1:${SOCKS_PORT:-1080}"
+                local _paqet_info=""
+                if [ "$ROLE" = "server" ]; then
+                    _paqet_info="Port: ${LISTEN_PORT:-8443}"
                 else
-                    echo -e "  Paqet:       ${RED}○ Stopped${NC}  |  Port: ${LISTEN_PORT:-8443}"
+                    _paqet_info="Server: ${REMOTE_SERVER:-N/A}"
+                fi
+                if is_paqet_running; then
+                    echo -e "  Paqet:       ${GREEN}● Running${NC}  |  ${_paqet_info}  |  SOCKS5: 127.0.0.1:${SOCKS_PORT:-1080}"
+                else
+                    echo -e "  Paqet:       ${RED}○ Stopped${NC}  |  ${_paqet_info}"
                 fi
             else
                 echo -e "  Paqet:       ${DIM}not installed${NC}"
